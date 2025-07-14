@@ -1,0 +1,64 @@
+name: Android Proper Build
+
+on: 
+  workflow_dispatch:
+  push:
+
+env:
+  ANDROID_NDK_VERSION: r25b
+  FRIDA_COMPILER_MOD: subprojects/frida-core/src/compiler/go.mod
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [arm64]
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          
+      - name: Grab frida-core
+        run: python3 tools/ensure-submodules.py frida-core
+        
+      - name: Apply patch
+        run: |
+          cd subprojects/frida-core
+          curl -L https://raw.githubusercontent.com/frida/frida-core/725286c9cccbc74f2e80b7f1e15f3e17134e4ba7/lib/payload/cloak.vala -o lib/payload/cloak.vala
+          cd ../..
+          
+      - name: Set up NDK
+        id: setup-ndk
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: ${{ env.ANDROID_NDK_VERSION }}
+          add-to-path: false
+          
+      - name: Add ANDROID_NDK_ROOT to environment
+        run: echo "ANDROID_NDK_ROOT=${{ steps.setup-ndk.outputs.ndk-path }}" >> $GITHUB_ENV
+        
+      - name: Configure
+        run: |
+          ./configure \
+            --host=android-${{ matrix.arch }} \
+            --enable-server \
+            --enable-portal \
+            -- \
+            -Dfrida-gum:devkits=gum,gumjs \
+            -Dfrida-core:devkits=core
+            
+      - name: Compile
+        run: make
+        
+      - name: List outputs
+        run: |
+          find build -name "frida-server" -type f
+          ls -la build/frida-android-${{ matrix.arch }}/bin/ || true
+          
+      - name: Upload frida-server
+        uses: actions/upload-artifact@v4
+        with:
+          name: frida-server-android-${{ matrix.arch }}-patched
+          path: build/frida-android-${{ matrix.arch }}/bin/frida-server
