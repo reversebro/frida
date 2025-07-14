@@ -58,3 +58,4 @@ To ensure that macOS accepts the newly created certificate, restart the
 ## Learn more
 
 Have a look at our [documentation](https://frida.re/docs/home/).
+# Android build trigger
