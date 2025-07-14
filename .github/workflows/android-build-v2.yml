@@ -1,0 +1,35 @@
+name: Android Build V2
+
+on: 
+  push:
+  workflow_dispatch:
+
+jobs:
+  build-android:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          
+      - name: Apply Android fix
+        run: |
+          cd subprojects/frida-core
+          curl -L https://raw.githubusercontent.com/frida/frida-core/725286c9cccbc74f2e80b7f1e15f3e17134e4ba7/lib/payload/cloak.vala -o lib/payload/cloak.vala
+          cd ../..
+          
+      - name: Build frida-server
+        run: |
+          make server-android-arm64
+          
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frida-server-android-arm64-patched
+          path: build/frida-android-arm64/bin/frida-server
