@@ -1,0 +1,48 @@
+name: Android Simple Build
+
+on: 
+  workflow_dispatch:
+  push:
+
+env:
+  ANDROID_NDK_VERSION: r25b
+
+jobs:
+  build:
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v4
+        
+      - name: Init submodules
+        run: git submodule update --init --recursive --depth=1
+          
+      - name: Apply patch
+        run: |
+          cd subprojects/frida-core
+          curl -L https://raw.githubusercontent.com/frida/frida-core/725286c9cccbc74f2e80b7f1e15f3e17134e4ba7/lib/payload/cloak.vala -o lib/payload/cloak.vala
+          
+      - name: Setup environment
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-pip python3-setuptools python3-dev build-essential
+          pip3 install colorama prompt-toolkit pygments meson ninja
+          
+      - name: Build core
+        run: make core-android-arm64 || true
+        
+      - name: Build server
+        run: make server-android-arm64 || true
+        
+      - name: Find artifacts
+        run: |
+          find . -name "frida-server*" -type f 2>/dev/null || true
+          find build -type f -name "*server*" 2>/dev/null || true
+          ls -la build/frida-android-arm64/bin/ 2>/dev/null || true
+          
+      - name: Upload any server found
+        uses: actions/upload-artifact@v4
+        with:
+          name: frida-android-build-output
+          path: |
+            build/
+          if-no-files-found: warn
