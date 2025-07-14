@@ -1,0 +1,32 @@
+name: CI with Patch
+
+on: 
+  push:
+  workflow_dispatch:
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      
+      - name: Apply Android thread count fix
+        run: |
+          cd subprojects/frida-core
+          curl -L https://raw.githubusercontent.com/frida/frida-core/725286c9cccbc74f2e80b7f1e15f3e17134e4ba7/lib/payload/cloak.vala -o lib/payload/cloak.vala
+          
+      - name: Build
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential python3-dev python3-pip
+          pip3 install meson ninja
+          make server-android-arm64
+          
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frida-server-android-arm64
+          path: build/frida-android-arm64/bin/frida-server
+EOF < /dev/null
