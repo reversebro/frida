@@ -1,0 +1,86 @@
+name: Android Final Build
+
+on: 
+  workflow_dispatch:
+  push:
+
+env:
+  ANDROID_NDK_VERSION: r25b
+  FRIDA_COMPILER_MOD: subprojects/frida-core/src/compiler/go.mod
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [arm64]
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          
+      - name: Grab frida-core
+        run: python3 tools/ensure-submodules.py frida-core
+        
+      - name: Apply patch
+        run: |
+          cd subprojects/frida-core
+          curl -L https://raw.githubusercontent.com/frida/frida-core/725286c9cccbc74f2e80b7f1e15f3e17134e4ba7/lib/payload/cloak.vala -o lib/payload/cloak.vala
+          cd ../..
+          
+      - name: Set up NDK
+        id: setup-ndk
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: ${{ env.ANDROID_NDK_VERSION }}
+          add-to-path: false
+          
+      - name: Add ANDROID_NDK_ROOT to environment
+        run: echo "ANDROID_NDK_ROOT=${{ steps.setup-ndk.outputs.ndk-path }}" >> $GITHUB_ENV
+        
+      - name: Configure
+        run: |
+          ./configure \
+            --host=android-${{ matrix.arch }} \
+            --enable-server \
+            --enable-portal \
+            -- \
+            -Dfrida-gum:devkits=gum,gumjs \
+            -Dfrida-core:devkits=core
+            
+      - name: Compile
+        run: make
+        
+      - name: Install
+        run: make install
+        
+      - name: Find all frida-server files
+        run: |
+          echo "=== Finding frida-server in entire repository ==="
+          find . -name "frida-server*" -type f 2>/dev/null | head -20
+          echo "=== Finding in build directory ==="
+          find build -name "*server*" -type f 2>/dev/null | head -20
+          echo "=== Checking install directory ==="
+          ls -la /usr/local/bin/frida-server* 2>/dev/null || true
+          echo "=== Checking frida prefix ==="
+          echo "FRIDA_PREFIX=$FRIDA_PREFIX"
+          ls -la $FRIDA_PREFIX/bin/ 2>/dev/null || true
+          
+      - name: Upload frida-server (multiple paths)
+        uses: actions/upload-artifact@v4
+        with:
+          name: frida-server-android-${{ matrix.arch }}-final
+          path: |
+            build/frida-android-${{ matrix.arch }}/bin/frida-server
+            build/*/bin/frida-server
+            /usr/local/bin/frida-server
+            ${{ env.FRIDA_PREFIX }}/bin/frida-server
+          if-no-files-found: warn
+          
+      - name: Upload entire build directory for inspection
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-build-directory-${{ matrix.arch }}
+          path: build/
+          if-no-files-found: warn
